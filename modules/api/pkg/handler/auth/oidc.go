@@ -77,10 +77,18 @@ func NewOpenIDClient(
 		return nil, err
 	}
 
+	verifierConfig := &oidc.Config{ClientID: oidcConfig.ClientID}
+	if len(oidcConfig.TrustedAudiences) > 0 {
+		// The audience is checked manually in Verify() against ClientID and
+		// TrustedAudiences, since the underlying verifier only supports a
+		// single expected audience.
+		verifierConfig = &oidc.Config{SkipClientIDCheck: true}
+	}
+
 	return &OpenIDClient{
 		tokenExtractor: extractor,
 		redirectURI:    redirectURI,
-		verifier:       p.Verifier(&oidc.Config{ClientID: oidcConfig.ClientID}),
+		verifier:       p.Verifier(verifierConfig),
 		provider:       p,
 		httpClient:     client,
 		oidcConfig:     oidcConfig,
@@ -105,6 +113,10 @@ func (o *OpenIDClient) Verify(ctx context.Context, token string) (authtypes.Toke
 			return authtypes.TokenClaims{}, &TokenExpiredError{msg: err.Error()}
 		}
 		return authtypes.TokenClaims{}, err
+	}
+
+	if len(o.oidcConfig.TrustedAudiences) > 0 && !audienceTrusted(idToken.Audience, o.oidcConfig.ClientID, o.oidcConfig.TrustedAudiences) {
+		return authtypes.TokenClaims{}, fmt.Errorf("oidc: expected audience %q (or one of %v), got %q", o.oidcConfig.ClientID, o.oidcConfig.TrustedAudiences, idToken.Audience)
 	}
 
 	claims := map[string]interface{}{}
@@ -143,6 +155,21 @@ func (o *OpenIDClient) Verify(ctx context.Context, token string) (authtypes.Toke
 	}
 
 	return oidcClaims, nil
+}
+
+// audienceTrusted reports whether aud contains clientID or any of trustedAudiences.
+func audienceTrusted(aud []string, clientID string, trustedAudiences []string) bool {
+	for _, a := range aud {
+		if a == clientID {
+			return true
+		}
+		for _, trusted := range trustedAudiences {
+			if a == trusted {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // AuthCodeURL returns a URL to OpenID provider's consent page

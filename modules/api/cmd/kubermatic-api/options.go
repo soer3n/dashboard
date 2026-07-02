@@ -152,7 +152,25 @@ func newServerRunOptions() (serverRunOptions, error) {
 		SkipTLSVerify: s.oidcSkipTLSVerify,
 	}
 
+	// The dashboard login flow (pkg/handler/v2/authflow) mints id_tokens against
+	// the issuer client and stores them in the same "token" cookie that the
+	// authenticator verifier below reads on every API request. Without this,
+	// those tokens are rejected here whenever the issuer and authenticator
+	// clients differ (the common case), bouncing users back to the login page
+	// right after a successful login.
+	s.oidcAuthenticatorConfiguration.TrustedAudiences = trustedAudiencesFor(s.oidcAuthenticatorClientID, s.oidcIssuerClientID)
+
 	return s, nil
+}
+
+// trustedAudiencesFor returns the additional "aud" values the authenticator's
+// OIDC verifier should accept, so id_tokens minted by the issuer client are
+// also accepted when validating the "token" cookie set by the login flow.
+func trustedAudiencesFor(authenticatorClientID, issuerClientID string) []string {
+	if issuerClientID == "" || issuerClientID == authenticatorClientID {
+		return nil
+	}
+	return []string{issuerClientID}
 }
 
 func (o serverRunOptions) validate() error {

@@ -134,4 +134,10 @@ type OIDCConfiguration struct {
 	OfflineAccessAsScope bool
 	// SkipTLSVerify skip TLS verification for the token issuer
 	SkipTLSVerify bool
+	// TrustedAudiences holds additional client IDs that are accepted as the
+	// "aud" claim of an id_token, on top of ClientID. Used when id_tokens
+	// issued to a different OIDC client (e.g. the issuer client used by the
+	// dashboard login flow) must also be accepted here (e.g. the authenticator
+	// client used to authorize regular API requests).
+	TrustedAudiences []string
 }
